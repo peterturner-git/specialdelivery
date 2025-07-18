@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Special Delivery – Oregon Trail Style</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      overflow: hidden;
+      font-family: monospace;
+      color: #00FF00;
+      height: 100%;
+      width: 100%;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background-color: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+      flex-direction: column;
+    }
+
+    /* MODIFIED: Special Delivery Title Style */
+    #special-delivery-title {
+      font-size: 3em;
+      /* Increased size for emphasis */
+      font-family: 'Courier New', Courier, monospace;
+      /* More pixelated look */
+      color: #00FF00;
+      text-align: center;
+      margin-bottom: 20px;
+      user-select: none;
+      line-height: 1em;
+      /* Adjust line height */
+    }
+
+    #start-btn,
+    #next-btn,
+    .choice-btn {
+      padding: 10px 20px;
+      font-family: monospace;
+      background-color: #00FF00;
+      color: black;
+      border: none;
+      cursor: pointer;
+      margin-top: 20px;
+      margin-left: 10px;
+      margin-right: 10px;
+    }
+
+    #typing-text {
+      white-space: pre-wrap;
+      font-size: 1em;
+      line-height: 1.5em;
+      max-width: 600px;
+      user-select: none;
+    }
+
+    #truck-scene {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background:
+        linear-gradient(to bottom, transparent 50%, black 50%),
+        url('https://i.imgur.com/9P1HHcL.png');
+      background-repeat: repeat-x;
+      background-size: auto 75%;
+      background-position: top right;
+      overflow: visible;
+    }
+
+    #truck {
+      position: absolute;
+      bottom: 60px;
+      width: 120px;
+      left: 100vw;
+      /* Original starting position for truck-in animation */
+      image-rendering: pixelated;
+    }
+
+    #man,
+    #man-left,
+    #box,
+    #tornado {
+      position: absolute;
+      image-rendering: pixelated;
+      display: none;
+    }
+
+    #man,
+    #man-left {
+      bottom: 130px;
+      width: 80px;
+    }
+
+    #box {
+      width: 40px;
+      bottom: 130px;
+      left: 63vw;
+    }
+
+    #man {
+      left: 65vw;
+    }
+
+    #man-left {
+      left: 65vw;
+    }
+
+    #tornado {
+      width: 120px;
+      bottom: 60px;
+      /* Match truck's bottom */
+    }
+
+    #text-below-scene {
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      font-size: 1.1em;
+      color: #00FF00;
+      font-family: monospace;
+      line-height: 1.4em;
+      user-select: none;
+    }
+
+    #click-text,
+    #loaded-text,
+    #warning-text {
+      margin-top: 6px;
+      font-weight: bold;
+      user-select: none;
+      display: none;
+    }
+
+    .choice-box {
+      position: absolute;
+      cursor: pointer;
+      image-rendering: pixelated;
+    }
+
+    @keyframes bounce {
+      from {
+        transform: translateY(0);
+      }
+
+      to {
+        transform: translateY(-10px);
+      }
+    }
+
+    @keyframes truck-in {
+      from {
+        left: 100vw;
+      }
+
+      to {
+        left: 55vw;
+      }
+    }
+
+    @keyframes scroll-bg {
+      0% {
+        background-position-x: 0;
+      }
+
+      100% {
+        background-position-x: 1000px;
+      }
+    }
+
+    .scrolling {
+      animation: scroll-bg 10s linear infinite;
+    }
+
+    /* Styles for final scene elements */
+    #confetti-container {
+      position: fixed;
+      /* Use fixed so it's always on top */
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 9999;
+    }
+
+    .confetti {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background-color: #00FF00;
+      /* Example color */
+      opacity: 0;
+      /* Hidden until animated */
+      animation: fall 2s linear infinite, flash 0.3s alternate infinite;
+    }
+
+    @keyframes fall {
+      0% {
+        transform: translateY(-20px) translateX(0) rotate(0deg);
+        opacity: 0;
+      }
+
+      20% {
+        opacity: 1;
+      }
+
+      100% {
+        transform: translateY(100vh) translateX(50px) rotate(360deg);
+        opacity: 0;
+      }
+    }
+
+    @keyframes flash {
+      0% {
+        background-color: #00FF00;
+      }
+
+      50% {
+        background-color: white;
+      }
+
+      100% {
+        background-color: #00FF00;
+      }
+    }
+
+    /* Additional styles for the house and final box/dinosaur */
+    #house {
+      position: absolute;
+      bottom: 40px;
+      /* Adjust to sit on the ground */
+      width: 125px;
+      /* 50% smaller than previous 250px */
+      image-rendering: pixelated;
+      display: none;
+      /* Initially hidden */
+    }
+
+    #final-delivery-box,
+    #dinosaur-success {
+      position: absolute;
+      bottom: 130px;
+      /* Matches original box's bottom (truck is at 60px, man at 130px) */
+      width: 40px;
+      /* Consistent with previous boxes */
+      /* height: 40px;  Removed explicit height to allow proportional scaling */
+      display: none;
+      image-rendering: pixelated;
+    }
+
+    /* Added for final message overlay */
+    #final-message-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      z-index: 100;
+      /* Above scene elements, below confetti */
+      pointer-events: none;
+      /* Allow clicks to pass through initially */
+    }
+
+    #final-message-text {
+      font-size: 1.5em;
+      color: #00FF00;
+      font-family: monospace;
+      user-select: none;
+      margin-top: 20px;
+      /* Give space for other elements */
+      white-space: pre-wrap;
+      /* Allow new lines */
+      text-align: center;
+      /* Center the final message */
+    }
+  </style>
+</head>
+
+<body>
+  <div id="game-container">
+    <div id="special-delivery-title">Special Delivery</div> <button id="start-btn">Begin Journey</button>
+  </div>
+
+  <div id="confetti-container"></div>
+  <script>
+    const game = document.getElementById('game-container');
+    const confettiContainer = document.getElementById('confetti-container');
+    const introText = `Muskogee, OK – July, 2025
+
+You are preparing for a Special Delivery.
+
+A package of great importance must be delivered
+from Northeastern Oklahoma to a quiet neighborhood
+in Kansas City, Missouri.
+
+The journey will be long and uncertain.
+
+You will face winding roads, unpredictable weather,
+and diseases that will threaten your life.
+
+Never lose morale.
+Dedicate your life to the parcel.
+And above all — make sure it arrives.
+
+Good luck, traveler.`;
+    let userChoseProceed = null;
+    let correctBoxSelected = false; // Global variable to track correct box selection
+    document.getElementById('start-btn').onclick = () => {
+      showTypingScene();
+    };
+
+    function showTypingScene() {
+      game.innerHTML = '<div id="typing-text"></div>';
+      typeWriter(introText, 25, () => {
+        const nextBtn = document.createElement('button');
+        nextBtn.id = 'next-btn';
+        nextBtn.textContent = 'Next';
+        nextBtn.onclick = startTruckScene;
+        game.appendChild(nextBtn);
+      });
+    }
+
+    function typeWriter(text, speed, callback) {
+      let i = 0;
+      const el = document.getElementById('typing-text');
+      el.innerHTML = '';
+
+      function type() {
+        if (i < text.length) {
+          el.innerHTML += text.charAt(i);
+          i++;
+          setTimeout(type, speed);
+        } else {
+          callback();
+        }
+      }
+      type();
+    }
+
+    function startTruckScene() {
+      game.innerHTML =
+        `<div id="truck-scene">
+          <img id="man" src="https://i.imgur.com/AtslEwQ.png" />
+          <img id="box" src="https://i.imgur.com/rCziMTS.png" />
+          <img id="man-left" src="https://i.imgur.com/6t69p36.png" />
+          <img id="truck" src="https://i.imgur.com/kK49Lyf.png" />
+          <img id="tornado" src="https://i.imgur.com/SGsIJyE.png" />
+          <div id="text-below-scene">
+            <div id="click-text">Click to load package, Tracking Number: HBD-MHS-22.</div>
+            <div id="loaded-text">Package Loaded.</div>
+            <div id="warning-text"></div>
+          </div>
+        </div>`;
+      const truck = document.getElementById('truck');
+      const man = document.getElementById('man');
+      const manLeft = document.getElementById('man-left');
+      const box = document.getElementById('box');
+      const clickText = document.getElementById('click-text');
+      const loadedText = document.getElementById('loaded-text');
+      const warningText = document.getElementById('warning-text');
+      const tornado = document.getElementById('tornado');
+      const scene = document.getElementById('truck-scene');
+      tornado.style.display = 'none';
+      tornado.style.left = '-150px';
+      truck.style.animation = 'truck-in 5s ease-out forwards, bounce 0.4s infinite alternate';
+      truck.style.display = 'block';
+      setTimeout(() => {
+        truck.style.animation = 'truck-in 0s forwards';
+        truck.style.left = '55vw';
+        truck.style.display = 'block';
+        man.style.display = 'block';
+        box.style.display = 'block';
+        clickText.style.display = 'block';
+        loadedText.style.display = 'none';
+        warningText.style.display = 'none';
+        box.style.cursor = 'pointer';
+        box.title = 'Click to load package';
+        box.onclick = () => {
+          man.style.display = 'none';
+          manLeft.style.left = '65vw';
+          manLeft.style.bottom = '130px';
+          manLeft.style.display = 'block';
+          setTimeout(() => {
+            manLeft.style.left = '63vw';
+            box.style.display = 'none';
+            setTimeout(() => {
+              manLeft.style.display = 'none';
+              clickText.style.display = 'none';
+              loadedText.style.display = 'block';
+              scene.classList.add('scrolling');
+              truck.style.left = '55vw';
+              truck.style.animation = 'bounce 0.4s infinite alternate';
+              loadedText.style.display = 'block';
+              setTimeout(() => {
+                loadedText.style.display = 'none';
+                scene.classList.remove('scrolling');
+                truck.style.animation = 'none';
+                typeText(
+                  "Storm clouds are gathering and thunder is rumbling.\n\nProceed anyway, or wait for storm to pass?",
+                  warningText,
+                  () => {
+                    const proceedBtn = document.createElement('button');
+                    proceedBtn.textContent = 'PROCEED';
+                    proceedBtn.className = 'choice-btn';
+                    const waitBtn = document.createElement('button');
+                    waitBtn.textContent = 'WAIT';
+                    waitBtn.className = 'choice-btn';
+                    warningText.appendChild(document.createElement('br'));
+                    warningText.appendChild(proceedBtn);
+                    warningText.appendChild(waitBtn);
+                    proceedBtn.onclick = () => {
+                      userChoseProceed = true;
+                      warningText.style.display = 'none';
+                      startTornadoAnimation(truck, tornado, scene);
+                    };
+                    waitBtn.onclick = () => {
+                      userChoseProceed = false;
+                      warningText.style.display = 'none';
+                      startTornadoAnimation(truck, tornado, scene);
+                    };
+                  }
+                );
+                warningText.style.display = 'block';
+              }, 3000);
+            }, 500);
+          }, 500);
+        };
+      }, 5000);
+    }
+
+    function startTornadoAnimation(truck, tornado, scene) {
+      scene.classList.remove('scrolling');
+      truck.style.animation = 'none';
+      tornado.style.display = 'block';
+      tornado.style.left = '-150px';
+      tornado.style.bottom = truck.style.bottom;
+      const tornadoSpeed = 5;
+      let tornadoX = -150;
+      const tornadoEndX = window.innerWidth + 200;
+      // Get truck position in px
+      const truckRect = truck.getBoundingClientRect();
+      const truckX = truckRect.left;
+      // Flag to swap truck image once tornado aligns
+      let damagedTruckShown = false;
+      // Create damaged truck img, hidden initially
+      let damagedTruck = document.getElementById('damaged-truck');
+      if (!damagedTruck) {
+        damagedTruck = document.createElement('img');
+        damagedTruck.id = 'damaged-truck';
+        damagedTruck.src = 'https://i.imgur.com/nUaZdXC.png';
+        damagedTruck.style.position = 'absolute';
+        damagedTruck.style.imageRendering = 'pixelated';
+        damagedTruck.style.display = 'none';
+        scene.appendChild(damagedTruck);
+      }
+      // Small boxes array to hold the 3 small box elements
+      let smallBoxes = [];
+      // Helper: Get computed style value in px or fallback default
+      function getComputedPx(el, prop, fallback = 40) {
+        const val = window.getComputedStyle(el)[prop];
+        if (val && val.endsWith('px')) return parseFloat(val);
+        return fallback;
+      }
+      // Function to create the 3 small boxes positioned relative to truck
+      function createSmallBoxes() {
+        const boxUrl = 'https://i.imgur.com/rCziMTS.png';
+        const origBox = document.getElementById('box');
+        if (!origBox) return;
+        // Get original box computed styles to clone exactly
+        const origStyle = window.getComputedStyle(origBox);
+        const width = origStyle.width;
+        const height = origStyle.height;
+        const imageRendering = origStyle.imageRendering;
+        // Positions in px relative to truck X (pixels on screen)
+        const frontX = truckX + 130;
+        const behind1X = truckX - 90;
+        const behind2X = truckX - 45;
+        // Bottom position - keep same bottom as original box in px from bottom of viewport
+        const bottomPx = getComputedPx(origBox, 'bottom', 130);
+        const positions = [{
+            left: frontX,
+            bottom: bottomPx
+          },
+          {
+            left: behind1X,
+            bottom: bottomPx
+          },
+          {
+            left: behind2X,
+            bottom: bottomPx
+          }
+        ];
+        positions.forEach(pos => {
+          const b = document.createElement('img');
+          b.src = boxUrl;
+          b.className = 'choice-box';
+          // Set exact styles cloned from original box, except left/bottom position
+          b.style.width = width;
+          b.style.height = height;
+          b.style.imageRendering = imageRendering;
+          b.style.position = 'absolute';
+          b.style.left = pos.left + 'px';
+          b.style.bottom = pos.bottom + 'px';
+          scene.appendChild(b);
+          smallBoxes.push(b);
+        });
+      }
+
+      function removeSmallBoxes() {
+        smallBoxes.forEach(b => b.remove());
+        smallBoxes = [];
+      }
+      // --- MODIFIED: showAfterTornadoText to reflect user's choice ---
+      function showAfterTornadoText() {
+        game.innerHTML = '<div id="typing-text"></div>';
+        const typingEl = document.getElementById('typing-text');
+        const nextBtn = document.createElement('button');
+        nextBtn.id = 'next-btn';
+        nextBtn.textContent = 'Next';
+        nextBtn.style.display = 'none';
+        nextBtn.onclick = showBoxSelectionScene;
+        game.appendChild(nextBtn);
+        let textContent = "";
+        if (userChoseProceed) {
+          textContent = "You proceeded into imminent danger and were hit by a tornado.\n\nYour delivery truck was damaged and you only have room for one package.";
+        } else {
+          textContent = "You waited for the storm to pass, but unfortunately tornadoes are unpredictable, so it hit you anyway.\n\nYour delivery truck was damaged and you only have room for one package.";
+        }
+        typeWriter(textContent, 25, () => {
+          nextBtn.style.display = 'inline-block';
+        });
+      }
+      // --- END MODIFICATION ---
+      function showBoxSelectionScene() {
+        game.innerHTML =
+          `<div id="truck-scene" style="background:none;">
+          <div id="typing-text" style="max-width:none; font-size:1.2em; margin-bottom: 10px;"></div>
+          <div id="box-container" style="position:relative; height:200px; width:100vw;"></div>
+        </div>`;
+        const typingTextEl = document.getElementById('typing-text');
+        const boxContainer = document.getElementById('box-container');
+        // Box info: tracking # and correctness
+        const boxesData = [{
+            tracking: 'HBD-MHS-22',
+            correct: true
+          },
+          {
+            tracking: 'HBD-PMT-21',
+            correct: false
+          },
+          {
+            tracking: 'HBD-SHM-22',
+            correct: false
+          },
+        ];
+        // Shuffle boxes so correct box position random
+        shuffleArray(boxesData);
+        // Create enlarged boxes spaced evenly
+        boxesData.forEach((boxData, i) => {
+          const boxImg = document.createElement('img');
+          boxImg.src = 'https://i.imgur.com/rCziMTS.png';
+          boxImg.className = 'choice-box';
+          boxImg.style.height = '100px';
+          boxImg.style.left = `${(i + 1) * 25}vw`;
+          boxImg.style.bottom = '50px';
+          boxImg.style.position = 'absolute';
+          boxImg.style.cursor = 'pointer';
+          boxImg.dataset.correct = boxData.correct ? 'true' : 'false';
+          // Create label below box
+          const label = document.createElement('div');
+          label.textContent = boxData.tracking;
+          label.style.position = 'absolute';
+          label.style.left = `${(i + 1) * 25}vw`;
+          label.style.bottom = '20px';
+          label.style.width = '100px';
+          label.style.color = '#00FF00';
+          label.style.fontFamily = 'monospace';
+          label.style.textAlign = 'center';
+          label.style.userSelect = 'none';
+          boxContainer.appendChild(boxImg);
+          boxContainer.appendChild(label);
+          boxImg.onclick = () => {
+            // Disable all box clicks after first selection
+            boxContainer.querySelectorAll('img').forEach(img => img.style.pointerEvents = 'none');
+            correctBoxSelected = (boxImg.dataset.correct === 'true'); // Set the global flag
+            startFinalDriveScene(); // Call the new final driving scene
+          };
+        });
+        const promptText = "Select the correct package to complete your delivery.";
+        typeWriter(promptText, 25, () => {});
+      }
+      // --- MODIFIED startFinalDriveScene ---
+      function startFinalDriveScene() {
+        game.innerHTML = `
+        <div id="truck-scene">
+          <img id="damaged-truck" src="https://i.imgur.com/nUaZdXC.png" style=" /* Use damaged truck directly */
+            position: absolute;
+            bottom: 60px;
+            width: 120px;
+            left: 55vw; /* Truck stays fixed at 55vw */
+            image-rendering: pixelated;
+            animation: bounce 0.4s infinite alternate; /* Truck continuously bounces */
+          " />
+          <img id="house" src="https://i.imgur.com/P4VfA1W.png" style="
+            position: absolute;
+            bottom: 40px; /* Adjust to sit on the ground */
+            left: -30vw; /* Start far off-screen left */
+            width: 125px; /* 50% smaller */
+            image-rendering: pixelated;
+            display: block; /* Make house visible from the start */
+          " />
+          <img id="final-delivery-box" src="https://i.imgur.com/rCziMTS.png" style="
+            position: absolute;
+            bottom: 130px; /* Consistent with previous boxes */
+            width: 40px; /* Consistent with previous boxes */
+            /* height: auto; */ /* Allow proportional scaling, removed explicit height */
+            display: none; /* Hidden until positioned */
+            image-rendering: pixelated;
+            cursor: pointer; /* Make it clickable */
+          " />
+          <img id="dinosaur-success" src="https://i.imgur.com/s5Ieg7J.png" style=" /* Using the provided success image for the dinosaur */
+            position: absolute;
+            bottom: 130px; /* Consistent with previous boxes */
+            width: 40px; /* Consistent with previous boxes */
+            /* height: auto; */ /* Allow proportional scaling, removed explicit height */
+            display: none; /* Hidden until needed */
+            image-rendering: pixelated;
+          " />
+          <div id="final-message-overlay">
+            <div id="final-message-text" style="display:none;"></div>
+          </div>
+        </div>
+      `;
+        const scene = document.getElementById('truck-scene');
+        const truck = document.getElementById('damaged-truck'); // Reference damaged truck
+        const house = document.getElementById('house');
+        const finalDeliveryBox = document.getElementById('final-delivery-box');
+        const dinosaurSuccess = document.getElementById('dinosaur-success');
+        const finalMessageOverlay = document.getElementById('final-message-overlay');
+        const finalMessageText = document.getElementById('final-message-text');
+        let houseCurrentLeft = -30; // in vw, starting from far left
+        const houseTargetLeft = 35; // in vw, position to the left of truck (55vw truck - 125px house width - spacing)
+        const animationSpeedHouse = 0.5; // Speed for house entering
+        let animationFrameId;
+        let animationStopped = false; // Flag to control stopping animations
+        // Start background scrolling and truck bouncing immediately
+        scene.classList.add('scrolling');
+        // truck.style.animation is already set in the HTML for continuous bounce
+        function finalDriveAnimation() {
+          if (animationStopped) return; // Stop if animation is halted
+          // Move house (from left to its target)
+          if (houseCurrentLeft < houseTargetLeft) {
+            houseCurrentLeft += animationSpeedHouse;
+            house.style.left = houseCurrentLeft + 'vw';
+          } else {
+            house.style.left = houseTargetLeft + 'vw'; // Snap to target
+          }
+          // Check if house is near its target position
+          const houseAtTarget = Math.abs(houseCurrentLeft - houseTargetLeft) < animationSpeedHouse;
+          if (houseAtTarget && !animationStopped) {
+            animationStopped = true; // Set flag to true to halt further animation
+            // Stop animations
+            cancelAnimationFrame(animationFrameId);
+            truck.style.animation = 'none'; // Stop bouncing
+            scene.classList.remove('scrolling'); // Stop background scroll
+            // Position the final box between house and truck
+            const truckRect = truck.getBoundingClientRect();
+            const houseRect = house.getBoundingClientRect();
+            const boxWidth = parseFloat(finalDeliveryBox.style.width);
+            // Calculate midpoint between house's right edge and truck's left edge
+            const spaceBetween = truckRect.left - houseRect.right;
+            const boxLeft = houseRect.right + (spaceBetween / 2) - (boxWidth / 2);
+            // Position vertically at ground level (truck.bottom is its base)
+            const boxBottom = parseFloat(truck.style.bottom); // Using the CSS bottom value directly
+            finalDeliveryBox.style.left = boxLeft + 'px';
+            finalDeliveryBox.style.bottom = boxBottom + 'px';
+            finalDeliveryBox.style.display = 'block'; // Make the box visible
+            finalDeliveryBox.style.cursor = 'pointer'; // Ensure cursor is pointer for clicking
+            // Type out "Click to open package"
+            // Ensure finalMessageOverlay allows clicks through to the box
+            finalMessageOverlay.style.pointerEvents = 'none';
+            typeText("Click to open package", finalMessageText, () => {
+              // The text has finished typing. Now, the box is clickable.
+            });
+            finalMessageText.style.display = 'block'; // Show the typing text container
+            // Set the click handler directly on the finalDeliveryBox here
+            finalDeliveryBox.onclick = () => {
+              finalMessageText.style.display = 'none'; // Hide "Click to open" message
+              finalDeliveryBox.style.cursor = 'default'; // Remove pointer
+              finalDeliveryBox.onclick = null; // Remove click listener to prevent multiple triggers
+              if (correctBoxSelected) {
+                // Hide the box and show the dinosaur
+                finalDeliveryBox.style.display = 'none';
+                dinosaurSuccess.style.left = finalDeliveryBox.style.left;
+                dinosaurSuccess.style.bottom = dinosaurSuccess.style.bottom;
+                dinosaurSuccess.style.width = dinosaurSuccess.style.width; // Maintain explicit width
+                // dinosaurSuccess.style.height = finalDeliveryBox.style.height; // REMOVED EXPLICIT HEIGHT
+                dinosaurSuccess.style.display = 'block';
+                showFinalSuccessScene(); // Directly call success scene
+              } else {
+                // Keep the wrong package box visible, then show game over
+                finalDeliveryBox.style.display = 'block'; // Ensure it stays visible
+                showGameOverScene(); // Directly call game over scene
+              }
+            };
+          } else {
+            // Continue animation
+            animationFrameId = requestAnimationFrame(finalDriveAnimation);
+          }
+        }
+        animationFrameId = requestAnimationFrame(finalDriveAnimation);
+      }
+      /* MODIFIED: showFinalSuccessScene to use typeText for message and new wording */
+      function showFinalSuccessScene() {
+        const finalMessageOverlay = document.getElementById('final-message-overlay');
+        const finalMessageText = document.getElementById('final-message-text');
+        // Clear any previous text
+        finalMessageText.innerHTML = '';
+        finalMessageText.style.display = 'block'; // Ensure it's visible
+        const successMsg = `Correct package delivered!
+Happy Birthday, Maya!`;
+        // Use typeText and specify finalMessageText as the element to type into
+        typeText(successMsg, finalMessageText, () => {
+          startConfetti(); // Start confetti *after* message is fully typed
+        });
+      }
+      /* MODIFIED: showGameOverScene to use typeText */
+      function showGameOverScene() {
+        const finalMessageOverlay = document.getElementById('final-message-overlay');
+        const finalMessageText = document.getElementById('final-message-text');
+        // Clear any previous text
+        finalMessageText.innerHTML = '';
+        finalMessageText.style.display = 'block'; // Ensure it's visible
+        const gameOverText = "Wrong package was delivered.\n\nGAME OVER.";
+        // Use typeText and specify finalMessageText as the element to type into
+        typeText(gameOverText, finalMessageText, () => {
+          // No need to clear game container
+        });
+      }
+      // Confetti logic (already good from previous step)
+      function startConfetti() {
+        confettiContainer.innerHTML = ''; // Clear previous confetti
+        const numberOfConfetti = 100;
+        for (let i = 0; i < numberOfConfetti; i++) {
+          const confetti = document.createElement('div');
+          confetti.className = 'confetti';
+          confetti.style.left = Math.random() * 100 + 'vw';
+          confetti.style.top = Math.random() * -50 + 'px'; // Start above screen
+          confetti.style.animationDelay = Math.random() * 2 + 's';
+          confettiContainer.appendChild(confetti);
+        }
+        // Stop confetti after a few seconds
+        setTimeout(() => {
+          confettiContainer.innerHTML = '';
+        }, 5000);
+      }
+      // --- Original Helper Functions (No Changes) ---
+      function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+      }
+      // This `animate` function is part of the `startTornadoAnimation` closure
+      // and is not a global function that causes issues. No changes here.
+      function animate() {
+        tornadoX += tornadoSpeed;
+        tornado.style.left = tornadoX + 'px';
+        if (!damagedTruckShown && Math.abs(tornadoX - truckX) < 15) {
+          damagedTruckShown = true;
+          // Hide original truck
+          truck.style.display = 'none';
+          // Copy size/pos before showing damaged truck:
+          const truckStyle = window.getComputedStyle(truck);
+          damagedTruck.style.width = truckStyle.width;
+          damagedTruck.style.left = truckStyle.left;
+          damagedTruck.style.bottom = truckStyle.bottom;
+          damagedTruck.style.display = 'block';
+          // Show small boxes around damaged truck
+          createSmallBoxes();
+        }
+        if (tornadoX < tornadoEndX) {
+          requestAnimationFrame(animate);
+        } else {
+          tornado.style.display = 'none';
+          // Clear small boxes after tornado passes
+          removeSmallBoxes();
+          // Show after tornado text and next scene only if user chose to proceed
+          if (userChoseProceed) {
+            showAfterTornadoText();
+          } else {
+            // For "WAIT" choice, just show same text for now (you can customize this later)
+            showAfterTornadoText();
+          }
+        }
+      }
+      // The call to this `animate()` is inside `startTornadoAnimation`
+      // and is not causing a global issue. No changes here.
+      animate();
+    } // End of startTornadoAnimation, moved this comment to clarify scope
+    function typeText(text, element, callback) {
+      let i = 0;
+      element.innerHTML = '';
+
+      function type() {
+        if (i < text.length) {
+          element.innerHTML += text.charAt(i);
+          i++;
+          setTimeout(type, 25);
+        } else {
+          callback();
+        }
+      }
+      type();
+    }
+  </script>
+</body>
+
+</html
