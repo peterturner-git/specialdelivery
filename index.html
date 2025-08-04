@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Horror Escape</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #joystick-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            display: none; /* Hidden by default */
+            z-index: 10;
+        }
+        #joystick-base {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            background: rgba(128, 128, 128, 0.3);
+            border-radius: 50%;
+        }
+        #joystick-thumb {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(200, 200, 200, 0.5);
+            border-radius: 50%;
+            top: 45px;
+            left: 45px;
+        }
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            color: #ff0000;
+            font-family: 'Courier New', Courier, monospace;
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 3rem;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-over-screen">
+        <div>
+            <p>YOU WERE CAUGHT</p>
+            <button id="restart-button" style="padding: 10px 20px; font-size: 1.5rem; color: white; background: #ff0000; border: 2px solid white; border-radius: 10px; cursor: pointer;">Try Again</button>
+        </div>
+    </div>
+    <div id="joystick-container">
+        <div id="joystick-base"></div>
+        <div id="joystick-thumb"></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+    // --- SCENE SETUP ---
+    let scene, camera, renderer;
+    let player, playerVelocity;
+    let worldObjects = [];
+    let collidableObjects = []; // Objects player can collide with
+    let granny;
+    let gameOver = false;
+    let clock;
+
+    // --- PLAYER CONTROLS & MOVEMENT ---
+    const playerSpeed = 5.0;
+    const playerHeight = 1.8;
+    const playerRadius = 0.4;
+    const gravity = -20.0; // Stronger gravity
+    
+    // --- MOBILE CONTROLS STATE ---
+    const joystick = {
+        active: false,
+        start: { x: 0, y: 0 },
+        current: { x: 0, y: 0 },
+        maxDistance: 75,
+        input: new THREE.Vector2()
+    };
+    const look = {
+        active: false,
+        start: { x: 0, y: 0 },
+        current: { x: 0, y: 0 }
+    };
+    const joystickContainer = document.getElementById('joystick-container');
+    const joystickBase = document.getElementById('joystick-base');
+    const joystickThumb = document.getElementById('joystick-thumb');
+
+
+    function init() {
+        clock = new THREE.Clock();
+        // Scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+        scene.fog = new THREE.Fog(0x111111, 0, 40);
+
+        // Camera (Player's POV)
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        player = new THREE.Group();
+        player.position.set(0, playerHeight, 8); // Starting position
+        player.add(camera);
+        scene.add(player);
+
+        playerVelocity = new THREE.Vector3();
+
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0xffffff, 0.7, 50);
+        pointLight.position.set(0, 8, 0);
+        pointLight.castShadow = true;
+        scene.add(pointLight);
+
+        // Build the world
+        buildHouse();
+        createGranny();
+
+        // Setup controls
+        setupControls();
+
+        // Start animation loop
+        animate();
+    }
+
+    function buildHouse() {
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x888877 });
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x332211 });
+        const stairMaterial = new THREE.MeshStandardMaterial({ color: 0x4a332a });
+        const wallHeight = 3;
+        const wallThickness = 0.2;
+
+        function createWall(width, depth, x, y, z, rotationY = 0) {
+            const wallGeo = new THREE.BoxGeometry(width, wallHeight, depth);
+            const wall = new THREE.Mesh(wallGeo, wallMaterial);
+            wall.position.set(x, y + wallHeight / 2, z);
+            wall.rotation.y = rotationY;
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
+            collidableObjects.push(wall);
+        }
+
+        function createFloor(width, depth, x, y, z) {
+            const floorGeo = new THREE.BoxGeometry(width, wallThickness, depth);
+            const floor = new THREE.Mesh(floorGeo, floorMaterial);
+            floor.position.set(x, y - wallThickness / 2, z);
+            floor.receiveShadow = true;
+            scene.add(floor);
+            collidableObjects.push(floor);
+        }
+        
+        // Ground Floor
+        createFloor(20, 20, 0, 0, 0);
+        // Outer walls
+        createWall(20, wallThickness, 0, 0, -10);
+        createWall(20, wallThickness, 0, 0, 10);
+        createWall(20, wallThickness, -10, 0, 0, Math.PI / 2);
+        createWall(20, wallThickness, 10, 0, 0, Math.PI / 2);
+        // Inner walls
+        createWall(14, wallThickness, -3, 0, 5); // Long wall
+        createWall(10, wallThickness, 5, 0, 0, Math.PI / 2); // Room divider
+        createWall(5, wallThickness, -7.5, 0, 0); // Small room wall
+
+        // Second Floor
+        const secondFloorY = 3.5;
+        createFloor(20, 12, 0, secondFloorY, -4); // Main floor area, with hole for stairs
+        // Second floor walls
+        createWall(20, wallThickness, 0, secondFloorY, -10);
+        createWall(8, wallThickness, -6, secondFloorY, 2);
+        createWall(8, wallThickness, 6, secondFloorY, 2);
+        createWall(20, wallThickness, -10, secondFloorY, 0, Math.PI / 2);
+        createWall(20, wallThickness, 10, secondFloorY, 0, Math.PI / 2);
+
+        // Stairs
+        const stairWidth = 2;
+        const stairHeight = secondFloorY;
+        const stairLength = 6;
+        const stairsGeo = new THREE.BoxGeometry(stairWidth, stairHeight, stairLength);
+        const stairs = new THREE.Mesh(stairsGeo, stairMaterial);
+        stairs.position.set(0, stairHeight / 2, 7);
+        stairs.rotation.x = -Math.atan(stairHeight / stairLength);
+        scene.add(stairs);
+        collidableObjects.push(stairs);
+
+        // Table
+        const tableTopGeo = new THREE.BoxGeometry(2, 0.1, 1);
+        const tableMaterial = new THREE.MeshStandardMaterial({ color: 0x5c3d21 });
+        const tableTop = new THREE.Mesh(tableTopGeo, tableMaterial);
+        tableTop.position.set(-8, 1, -8);
+        tableTop.castShadow = true;
+        scene.add(tableTop);
+        collidableObjects.push(tableTop);
+    }
+    
+    function createGranny() {
+        const grannyGeo = new THREE.CylinderGeometry(0.5, 0.5, 2, 16);
+        const grannyMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        granny = new THREE.Mesh(grannyGeo, grannyMat);
+        granny.position.set(-8, 1, 8);
+        granny.castShadow = true;
+        scene.add(granny);
+        
+        // Updated patrol path for new layout
+        granny.userData.path = [
+            new THREE.Vector3(-8, 1, 8),
+            new THREE.Vector3(8, 1, 8),
+            new THREE.Vector3(8, 1, -8),
+            new THREE.Vector3(-8, 1, -8),
+        ];
+        granny.userData.pathIndex = 0;
+        granny.userData.speed = 2.5;
+    }
+
+    function setupControls() {
+        window.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        window.addEventListener('touchend', onTouchEnd);
+        
+        document.getElementById('restart-button').addEventListener('click', () => {
+            window.location.reload();
+        });
+    }
+
+    function onTouchStart(event) {
+        event.preventDefault();
+        for (let i = 0; i < event.changedTouches.length; i++) {
+            const touch = event.changedTouches[i];
+            if (touch.clientX < window.innerWidth / 2 && !joystick.active) { // Left side for joystick
+                joystick.active = true;
+                joystick.start.x = touch.clientX;
+                joystick.start.y = touch.clientY;
+                joystick.current.x = touch.clientX;
+                joystick.current.y = touch.clientY;
+                joystickContainer.style.display = 'block';
+                joystickContainer.style.left = `${joystick.start.x - 75}px`;
+                joystickContainer.style.top = `${joystick.start.y - 75}px`;
+            } else if (touch.clientX >= window.innerWidth / 2 && !look.active) { // Right side for looking
+                look.active = true;
+                look.start.x = touch.clientX;
+                look.start.y = touch.clientY;
+                look.current.x = touch.clientX;
+                look.current.y = touch.clientY;
+            }
+        }
+    }
+
+    function onTouchMove(event) {
+        event.preventDefault(); // Prevent scrolling
+        for (let i = 0; i < event.changedTouches.length; i++) {
+            const touch = event.changedTouches[i];
+            if (joystick.active && touch.clientX < window.innerWidth / 2) {
+                joystick.current.x = touch.clientX;
+                joystick.current.y = touch.clientY;
+            } else if (look.active && touch.clientX >= window.innerWidth / 2) {
+                look.current.x = touch.clientX;
+                look.current.y = touch.clientY;
+            }
+        }
+    }
+
+    function onTouchEnd(event) {
+        for (let i = 0; i < event.changedTouches.length; i++) {
+            const touch = event.changedTouches[i];
+            if (touch.clientX < window.innerWidth / 2) {
+                joystick.active = false;
+                joystick.input.set(0, 0);
+                joystickContainer.style.display = 'none';
+            } else {
+                look.active = false;
+            }
+        }
+    }
+
+    function animate() {
+        if (gameOver) return;
+
+        requestAnimationFrame(animate);
+        const delta = clock.getDelta();
+
+        updatePlayer(delta);
+        updateGranny(delta);
+        checkGameOver();
+
+        renderer.render(scene, camera);
+    }
+
+    function updatePlayer(delta) {
+        // Handle look controls
+        if (look.active) {
+            const deltaX = look.current.x - look.start.x;
+            const deltaY = look.current.y - look.start.y;
+
+            player.rotation.y -= deltaX * 0.002;
+            camera.rotation.x -= deltaY * 0.002;
+            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+
+            look.start.x = look.current.x;
+            look.start.y = look.current.y;
+        }
+
+        // Handle joystick controls
+        if (joystick.active) {
+            let dx = joystick.current.x - joystick.start.x;
+            let dy = joystick.current.y - joystick.start.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > joystick.maxDistance) {
+                dx *= joystick.maxDistance / distance;
+                dy *= joystick.maxDistance / distance;
+            }
+            
+            joystickThumb.style.transform = `translate(${dx}px, ${dy}px)`;
+            joystick.input.x = dx / joystick.maxDistance;
+            joystick.input.y = dy / joystick.maxDistance;
+        } else {
+            joystickThumb.style.transform = `translate(0px, 0px)`;
+            joystick.input.set(0,0);
+        }
+
+        const moveDirection = new THREE.Vector3(joystick.input.x, 0, joystick.input.y);
+        moveDirection.applyQuaternion(player.quaternion);
+        moveDirection.normalize();
+
+        playerVelocity.x = moveDirection.x * playerSpeed;
+        playerVelocity.z = moveDirection.z * playerSpeed;
+        
+        // Gravity
+        playerVelocity.y += gravity * delta;
+
+        // --- COLLISION DETECTION ---
+        const playerBox = new THREE.Box3().setFromCenterAndSize(
+            player.position, 
+            new THREE.Vector3(playerRadius * 2, playerHeight, playerRadius * 2)
+        );
+
+        // Check X-axis collision
+        let tempPlayerBoxX = playerBox.clone().translate(new THREE.Vector3(playerVelocity.x * delta, 0, 0));
+        let collisionX = false;
+        for (const obj of collidableObjects) {
+            const objBox = new THREE.Box3().setFromObject(obj);
+            if (tempPlayerBoxX.intersectsBox(objBox)) {
+                collisionX = true;
+                break;
+            }
+        }
+        if (!collisionX) {
+            player.position.x += playerVelocity.x * delta;
+        }
+
+        // Check Z-axis collision
+        let tempPlayerBoxZ = playerBox.clone().translate(new THREE.Vector3(0, 0, playerVelocity.z * delta));
+        let collisionZ = false;
+        for (const obj of collidableObjects) {
+            const objBox = new THREE.Box3().setFromObject(obj);
+            if (tempPlayerBoxZ.intersectsBox(objBox)) {
+                collisionZ = true;
+                break;
+            }
+        }
+        if (!collisionZ) {
+            player.position.z += playerVelocity.z * delta;
+        }
+        
+        // Check Y-axis collision (falling/jumping)
+        let tempPlayerBoxY = playerBox.clone().translate(new THREE.Vector3(0, playerVelocity.y * delta, 0));
+        let collisionY = false;
+        let groundY = -Infinity;
+        for (const obj of collidableObjects) {
+            const objBox = new THREE.Box3().setFromObject(obj);
+            if (tempPlayerBoxY.intersectsBox(objBox)) {
+                collisionY = true;
+                playerVelocity.y = 0;
+                groundY = Math.max(groundY, objBox.max.y);
+                break;
+            }
+        }
+        if (!collisionY) {
+            player.position.y += playerVelocity.y * delta;
+        } else {
+            player.position.y = groundY + playerHeight / 2;
+        }
+    }
+    
+    function updateGranny(delta) {
+        const playerPos = player.position;
+        const grannyPos = granny.position;
+        const distanceToPlayer = playerPos.distanceTo(grannyPos);
+        
+        const chaseDistance = 15;
+        const chaseSpeed = granny.userData.speed * 1.5;
+        
+        // Simple AI: Chase or Patrol
+        if (distanceToPlayer < chaseDistance && Math.abs(playerPos.y - grannyPos.y) < 2) { // Only chase on same floor
+            // Chase
+            const direction = new THREE.Vector3().subVectors(playerPos, grannyPos).normalize();
+            granny.position.x += direction.x * chaseSpeed * delta;
+            granny.position.z += direction.z * chaseSpeed * delta;
+            granny.lookAt(playerPos.x, granny.position.y, playerPos.z);
+        } else {
+            // Patrol
+            const targetPos = granny.userData.path[granny.userData.pathIndex];
+            if (grannyPos.distanceTo(targetPos) < 0.5) {
+                granny.userData.pathIndex = (granny.userData.pathIndex + 1) % granny.userData.path.length;
+            } else {
+                const direction = new THREE.Vector3().subVectors(targetPos, grannyPos).normalize();
+                granny.position.x += direction.x * granny.userData.speed * delta;
+                granny.position.z += direction.z * granny.userData.speed * delta;
+                granny.lookAt(targetPos.x, granny.position.y, targetPos.z);
+            }
+        }
+    }
+    
+    function checkGameOver() {
+        const distance = player.position.distanceTo(granny.position);
+        if (distance < 1.0) {
+            gameOver = true;
+            document.getElementById('game-over-screen').style.display = 'flex';
+        }
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    init();
+    </script>
+</body>
+</html>
